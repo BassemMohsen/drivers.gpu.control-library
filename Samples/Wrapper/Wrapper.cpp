@@ -85,6 +85,12 @@ typedef struct ctl_telemetry_data
     double fanSpeedValue;
 };
 
+typedef struct ctl_fps_limiter_t
+{
+    bool isLimiterEnabled = false;
+    int32_t fpsLimitValue = 30;
+};
+
 ctl_api_handle_t hAPIHandle;
 ctl_device_adapter_handle_t* hDevices;
 
@@ -564,6 +570,68 @@ extern "C" {
         cout << "======== SetEnduranceGamingSettings ========" << endl;
         cout << "EGControl now: " << eg2.EGControl << endl;
         cout << "EGMode now:    " << eg2.EGMode << endl;
+
+    Exit:
+        return Result;
+    }
+
+
+    ctl_result_t SetFramesPerSecondLimit(ctl_device_adapter_handle_t hDevice, bool isEnabled, int32_t fpslimit)
+    {
+        ctl_result_t Result = CTL_RESULT_SUCCESS;
+
+        // build the set structure
+        ctl_3d_feature_getset_t Feature3D = { 0 };
+        Feature3D.bSet = TRUE;   // Enable or Disable FPS limiter
+        Feature3D.FeatureType = CTL_3D_FEATURE_FRAME_LIMIT;
+        Feature3D.Size = sizeof(Feature3D);
+        Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_INT32;
+        Feature3D.CustomValueSize =  0;
+        Feature3D.pCustomValue = NULL;
+        Feature3D.Value.IntType.Enable = isEnabled; // Enable or Disable FPS limiter
+        Feature3D.Value.IntType.Value  = fpslimit; // Set the actual frame limit
+        Feature3D.Version              = 0;
+
+
+        // issue the call
+        Result = ctlGetSet3DFeature(hDevice, &Feature3D);
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlGetSet3DFeature (SetFramesPerSecondLimit)");
+
+        // log for debug
+        cout << "======== SetFramesPerSecondLimit ========" << endl;
+        cout << "IntType.Enable: " << isEnabled << endl;
+        cout << "IntType.Value:    " << fpslimit << endl;
+
+    Exit:
+        return Result;
+    }
+
+
+    ctl_result_t GetFramesPerSecondLimit(ctl_device_adapter_handle_t hDevice, ctl_fps_limiter_t* fpslimiter)
+    {
+        ctl_result_t Result = CTL_RESULT_SUCCESS;
+
+        // build the get structure
+        ctl_3d_feature_getset_t Feature3D = { 0 };
+        Feature3D.bSet = FALSE;  // GET
+        Feature3D.FeatureType = CTL_3D_FEATURE_FRAME_LIMIT;
+        Feature3D.Size = sizeof(Feature3D);
+        Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_INT32;
+        Feature3D.CustomValueSize = 0;
+        Feature3D.pCustomValue = NULL;
+        Feature3D.Version     = 0;
+
+        // issue the call
+        Result = ctlGetSet3DFeature(hDevice, &Feature3D);
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlGetSet3DFeature (GetFramesPerSecondLimit)");
+
+        // log for debug
+        cout << "======== GetFramesPerSecondLimit ========" << endl;
+        cout << "Value.IntType.Enable:    " << Feature3D.Value.IntType.Enable << endl;
+        cout << "Value.IntType.Value:    " << Feature3D.Value.IntType.Value << endl;
+
+        fpslimiter->isLimiterEnabled = Feature3D.Value.IntType.Enable;
+        fpslimiter->fpsLimitValue = Feature3D.Value.IntType.Value;
 
     Exit:
         return Result;
