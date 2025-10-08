@@ -582,7 +582,7 @@ extern "C" {
 
         // build the set structure
         ctl_3d_feature_getset_t Feature3D = { 0 };
-        Feature3D.bSet = TRUE;   // Enable or Disable FPS limiter
+        Feature3D.bSet = TRUE;
         Feature3D.FeatureType = CTL_3D_FEATURE_FRAME_LIMIT;
         Feature3D.Size = sizeof(Feature3D);
         Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_INT32;
@@ -632,6 +632,120 @@ extern "C" {
 
         fpslimiter->isLimiterEnabled = Feature3D.Value.IntType.Enable;
         fpslimiter->fpsLimitValue = Feature3D.Value.IntType.Value;
+
+    Exit:
+        return Result;
+    }
+
+
+    ctl_result_t SetLowLatencySetting(ctl_device_adapter_handle_t hDevice, ctl_3d_low_latency_types_t setting)
+    {
+        ctl_result_t Result = CTL_RESULT_SUCCESS;
+
+        // build the set structure
+        ctl_3d_feature_getset_t Feature3D = { 0 };
+        Feature3D.bSet = TRUE;
+        Feature3D.FeatureType = CTL_3D_FEATURE_LOW_LATENCY;
+        Feature3D.Size = sizeof(Feature3D);
+        Feature3D.CustomValueSize = 0;
+        Feature3D.pCustomValue = NULL;
+        Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_ENUM;
+        Feature3D.Value.EnumType.EnableType = setting; // Set Low Latency Setting
+        Feature3D.Version = 0;
+
+        // issue the call
+        Result = ctlGetSet3DFeature(hDevice, &Feature3D);
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlGetSet3DFeature (SetLowLatencySetting)");
+
+        // log for debug
+        cout << "======== SetLowLatencySetting ========" << endl;
+        cout << "Value.EnumType.EnableType: " << setting << endl;
+
+
+    Exit:
+        return Result;
+    }
+
+
+    ctl_result_t GetLowLatencySetting(ctl_device_adapter_handle_t hDevice, ctl_3d_low_latency_types_t* setting)
+    {
+        ctl_result_t Result = CTL_RESULT_SUCCESS;
+
+        // build the get structure
+        ctl_3d_feature_getset_t Feature3D = { 0 };
+        Feature3D.bSet = FALSE;  // GET
+        Feature3D.FeatureType = CTL_3D_FEATURE_LOW_LATENCY;
+        Feature3D.Size = sizeof(Feature3D);
+        Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_ENUM;
+        Feature3D.CustomValueSize = 0;
+        Feature3D.pCustomValue = NULL;
+        Feature3D.Version = 0;
+
+        // issue the call
+        Result = ctlGetSet3DFeature(hDevice, &Feature3D);
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlGetSet3DFeature (GetFramesPerSecondLimit)");
+
+        // log for debug
+        cout << "======== GetFramesPerSecondLimit ========" << endl;
+        *setting = (ctl_3d_low_latency_types_t)Feature3D.Value.EnumType.EnableType;
+        cout << "Value.EnumType.EnableType:    " << *setting << endl;
+
+    Exit:
+        return Result;
+    }
+
+
+    ctl_result_t SetFrameSyncSetting(ctl_device_adapter_handle_t hDevice, ctl_gaming_flip_mode_flag_t setting)
+    {
+        ctl_result_t Result = CTL_RESULT_SUCCESS;
+
+        // build the set structure
+        ctl_3d_feature_getset_t Feature3D = { 0 };
+        Feature3D.bSet = TRUE;
+        Feature3D.FeatureType = CTL_3D_FEATURE_GAMING_FLIP_MODES;
+        Feature3D.Size = sizeof(Feature3D);
+        Feature3D.CustomValueSize = 0;
+        Feature3D.pCustomValue = NULL;
+        Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_ENUM;
+        Feature3D.Value.EnumType.EnableType = setting; // Set Frame Sync Type
+        Feature3D.Version = 0;
+
+        // issue the call
+        Result = ctlGetSet3DFeature(hDevice, &Feature3D);
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlGetSet3DFeature (SetFrameSyncSetting)");
+
+        // log for debug
+        cout << "======== SetFrameSyncSetting ========" << endl;
+        cout << "Value.EnumType.EnableType: " << setting << endl;
+
+
+    Exit:
+        return Result;
+    }
+
+
+    ctl_result_t GetFrameSyncSetting(ctl_device_adapter_handle_t hDevice, ctl_gaming_flip_mode_flag_t* setting)
+    {
+        ctl_result_t Result = CTL_RESULT_SUCCESS;
+
+        // build the get structure
+        ctl_3d_feature_getset_t Feature3D = { 0 };
+        Feature3D.bSet = FALSE;  // GET
+        Feature3D.FeatureType = CTL_3D_FEATURE_GAMING_FLIP_MODES;
+        Feature3D.Size = sizeof(Feature3D);
+        Feature3D.ValueType = CTL_PROPERTY_VALUE_TYPE_ENUM;
+        Feature3D.CustomValueSize = 0;
+        Feature3D.pCustomValue = NULL;
+        Feature3D.Version = 0;
+
+        // issue the call
+        Result = ctlGetSet3DFeature(hDevice, &Feature3D);
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlGetSet3DFeature (GetFrameSyncSetting)");
+
+        // log for debug
+        cout << "======== GetFrameSyncSetting ========" << endl;
+        *setting = (ctl_gaming_flip_mode_flag_t)Feature3D.Value.EnumType.EnableType;
+        cout << "Value.EnumType.EnableType:    " << *setting << endl;
 
     Exit:
         return Result;
