@@ -5,6 +5,7 @@ set(project "IGCL_Wrapper")
 
 set(all_file
     "Wrapper.cpp"
+    "ColorAlgorithms_App.cpp"
     ${ROOT_DIR}/wrapper/cApiWrapper.cpp
 )
 
@@ -13,5 +14,7 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
 
 include_directories(${ROOT_DIR}/includes)
 include_directories(${ROOT_DIR}/Samples/inc)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_library(${project} ${all_file})
