@@ -2050,18 +2050,105 @@ Exit:
     return Result;
 }
 
-double MapSaturation(int sliderValue) {
-    return 0.01 + sliderValue * 0.02;
+
+
+/***************************************************************
+ * @brief
+ * Generate OneDLut From brightness, contrast, gamma values
+ * @param pOneDLutConfig, Contrast, PanelGamma, Brightness
+ * @return void
+ ***************************************************************/
+void CreateOneDLutFromBCG(ctl_pixtx_1dlut_config_t *pOneDLutConfig, IPIXELD Contrast, IPIXELD PanelGamma, IPIXELD Brightness)
+{
+    IPIXELD RelativeGamma;
+    double *pRedLut, *pGreenLut, *pBlueLut;
+    double NormalizedOutputR, NormalizedOutputG, NormalizedOutputB;
+    double NormalizedInput;
+    double NormalizedOutputContrastBrightnessGammaR, NormalizedOutputContrastBrightnessGammaG, NormalizedOutputContrastBrightnessGammaB;
+
+    RelativeGamma.R = PanelGamma.R;
+    RelativeGamma.G = PanelGamma.G;
+    RelativeGamma.B = PanelGamma.B;
+
+    // Adjust inputs such that output is somewhat visible
+    Contrast.R = CLIP_DOUBLE(Contrast.R, 0.25, 1.75);
+    Contrast.G = CLIP_DOUBLE(Contrast.G, 0.25, 1.75);
+    Contrast.B = CLIP_DOUBLE(Contrast.B, 0.25, 1.75);
+
+    // Adjust inputs such that output is somewhat visible
+    RelativeGamma.R = CLIP_DOUBLE(RelativeGamma.R, 0.3, 2.8);
+    RelativeGamma.G = CLIP_DOUBLE(RelativeGamma.G, 0.3, 2.8);
+    RelativeGamma.B = CLIP_DOUBLE(RelativeGamma.B, 0.3, 2.8);
+
+    // Adjust inputs such that output is somewhat visible
+    Brightness.R = CLIP_DOUBLE(Brightness.R, -0.25, 0.25);
+    Brightness.G = CLIP_DOUBLE(Brightness.G, -0.25, 0.25);
+    Brightness.B = CLIP_DOUBLE(Brightness.B, -0.25, 0.25);
+
+    // Create 1DLUT from given input
+    pRedLut   = pOneDLutConfig->pSampleValues;
+    pGreenLut = pRedLut + pOneDLutConfig->NumSamplesPerChannel;
+    pBlueLut  = pGreenLut + pOneDLutConfig->NumSamplesPerChannel;
+
+    for (uint32_t i = 0; i < pOneDLutConfig->NumSamplesPerChannel; i++)
+    {
+        NormalizedInput = (double)i / (double)(pOneDLutConfig->NumSamplesPerChannel - 1);
+
+        NormalizedOutputR = ((NormalizedInput * Contrast.R) + Brightness.R);
+        NormalizedOutputG = ((NormalizedInput * Contrast.G) + Brightness.G);
+        NormalizedOutputB = ((NormalizedInput * Contrast.B) + Brightness.B);
+
+        NormalizedOutputR = CLIP_DOUBLE(NormalizedOutputR, 0.0, 1.0);
+        NormalizedOutputG = CLIP_DOUBLE(NormalizedOutputG, 0.0, 1.0);
+        NormalizedOutputB = CLIP_DOUBLE(NormalizedOutputB, 0.0, 1.0);
+
+        NormalizedOutputContrastBrightnessGammaR = pow(NormalizedOutputR, RelativeGamma.R);
+        NormalizedOutputContrastBrightnessGammaG = pow(NormalizedOutputG, RelativeGamma.G);
+        NormalizedOutputContrastBrightnessGammaB = pow(NormalizedOutputB, RelativeGamma.B);
+
+        pRedLut[i]   = NormalizedOutputContrastBrightnessGammaR;
+        pGreenLut[i] = NormalizedOutputContrastBrightnessGammaG;
+        pBlueLut[i]  = NormalizedOutputContrastBrightnessGammaB;
+    }
 }
 
-double MapHue(double sliderValue) {
-    double driverHue = fmod(sliderValue + 360.0, 360.0);
-    if (driverHue < 0.0)  // handle negative wrap (just in case)
-        driverHue += 360.0;
-    return driverHue;
+
+/***************************************************************
+ * @brief
+ * ApplyBrightnessContrastGamma
+ * @param hDisplayOutput, pBlockConfig, Contrast, Gamma, Brightness
+ * @return ctl_result_t
+ ***************************************************************/
+ctl_result_t ApplyBrightnessContrastGamma(ctl_display_output_handle_t hDisplayOutput, ctl_pixtx_block_config_t *pBlockConfig, IPIXELD Contrast, IPIXELD Gamma, IPIXELD Brightness)
+{
+    ctl_result_t Result                          = CTL_RESULT_SUCCESS;
+    ctl_pixtx_block_config_t LutConfig           = *pBlockConfig;
+    LutConfig.Size                               = sizeof(ctl_pixtx_block_config_t);
+    const uint32_t LutSize                       = LutConfig.Config.OneDLutConfig.NumSamplesPerChannel * LutConfig.Config.OneDLutConfig.NumChannels;
+    // this is the cause of the crash, NumChannels one channel only !
+    LutConfig.Config.OneDLutConfig.pSampleValues = (double *)malloc(LutSize * sizeof(double));
+
+    ctl_pixtx_pipe_set_config_t SetPixTxArgs = { 0 };
+    SetPixTxArgs.Size                        = sizeof(ctl_pixtx_pipe_set_config_t);
+    SetPixTxArgs.OpertaionType               = CTL_PIXTX_CONFIG_OPERTAION_TYPE_SET_CUSTOM;
+    SetPixTxArgs.NumBlocks                   = 1;          // We are enabling only one block
+    SetPixTxArgs.pBlockConfigs               = &LutConfig; // for 1DLUT block
+
+    EXIT_ON_MEM_ALLOC_FAILURE(LutConfig.Config.OneDLutConfig.pSampleValues, "LutConfig.Config.OneDLutConfig.pSampleValues");
+
+
+    CreateOneDLutFromBCG(&LutConfig.Config.OneDLutConfig, Contrast, Gamma, Brightness);
+
+    Result = ctlPixelTransformationSetConfig(hDisplayOutput, &SetPixTxArgs);
+
+    LOG_AND_EXIT_ON_ERROR(Result, "ctlPixelTransformationSetConfig");
+
+Exit:
+    CTL_FREE_MEM(LutConfig.Config.OneDLutConfig.pSampleValues);
+    return Result;
 }
 
-ctl_result_t SetHueSaturationValues(ctl_device_adapter_handle_t hDevice, double Hue, double Saturation)
+ctl_result_t SetBrightnessContrastGammaValues(ctl_device_adapter_handle_t hDevice, double contrast, double panelGamma, double brightness)
 {
     ctl_result_t Result = CTL_RESULT_SUCCESS;
     ctl_display_output_handle_t *hDisplayOutput = NULL;
@@ -2082,6 +2169,128 @@ ctl_result_t SetHueSaturationValues(ctl_device_adapter_handle_t hDevice, double 
     }
 
     hDisplayOutput = (ctl_display_output_handle_t *)malloc(sizeof(ctl_display_output_handle_t) * DisplayCount);
+    EXIT_ON_MEM_ALLOC_FAILURE(hDisplayOutput, "hDisplayOutput");
+
+    Result = ctlEnumerateDisplayOutputs(hDevice, &DisplayCount, hDisplayOutput);
+    LOG_AND_STORE_RESET_RESULT_ON_ERROR(Result, "ctlEnumerateDisplayOutputs");
+
+    // Todo: use Display Index in future, currently only Apply Hue Saturation on Display 0;
+    ctl_display_output_handle_t display = hDisplayOutput[0];
+
+    // 1st query about the number of blocks supported (pass PixTxCaps.pBlockConfigs as NULL to get number of blocks supported) and then allocate memeory accordingly in second call to get details of
+    // each pBlockConfigs
+    ctl_pixtx_pipe_get_config_t PixTxCaps = { 0 };
+    PixTxCaps.Size = sizeof(ctl_pixtx_pipe_get_config_t);
+    PixTxCaps.QueryType = CTL_PIXTX_CONFIG_QUERY_TYPE_CAPABILITY;
+
+    Result = GetPixTxCapability(display, &PixTxCaps); // API call will return the number of blocks supported in PixTxCaps.NumBlocks.
+
+    if (0 == PixTxCaps.NumBlocks)
+    {
+        Result = CTL_RESULT_ERROR_INVALID_SIZE;
+        LOG_AND_EXIT_ON_ERROR(Result, "ctlPixelTransformationGetConfig for query type capability");
+    }
+
+    const uint8_t NumBlocksToQuery = PixTxCaps.NumBlocks; // Query about the blocks in the pipeline
+
+    // Allocate required memory as per number of blocks supported.
+    PixTxCaps.pBlockConfigs = (ctl_pixtx_block_config_t*)malloc(NumBlocksToQuery * sizeof(ctl_pixtx_block_config_t));
+    EXIT_ON_MEM_ALLOC_FAILURE(PixTxCaps.pBlockConfigs, "PixTxCaps.pBlockConfigs");
+
+    memset(PixTxCaps.pBlockConfigs, 0, NumBlocksToQuery * sizeof(ctl_pixtx_block_config_t));
+
+    // Query capability of each block, number of blocks etc
+    Result = GetPixTxCapability(display, &PixTxCaps);
+
+    int32_t DesktopGammaBlockIndex = -1;
+    for (uint8_t i = 0; i < PixTxCaps.NumBlocks; i++)
+    {
+        // Need to consider the last 1DLUT block for Gamma
+        if (CTL_PIXTX_BLOCK_TYPE_1D_LUT == PixTxCaps.pBlockConfigs[i].BlockType)
+        {
+            // Make sure it's 3 Channels for the 1D LUT and it's not the Gamma LUT Block
+            if ((3 == PixTxCaps.pBlockConfigs[i].Config.OneDLutConfig.NumChannels))
+            {
+                DesktopGammaBlockIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (DesktopGammaBlockIndex < 0)
+    {
+        APP_LOG_ERROR("ctlPixelTransformationGetConfig did not report 1DLUT capability");
+        STORE_AND_RESET_ERROR(Result);
+    }
+    else
+    {
+        double brightness_mapped = (brightness - 50.0) / 50.0 * 0.25;
+        double contrast_mapped = 1.0 + ((contrast - 50.0) / 50.0) * 0.75;
+
+
+
+        IPIXELD Contrast   = { 0 };
+        IPIXELD PanelGamma = { 0 };
+        IPIXELD Brightness = { 0 };
+
+        Contrast.R = contrast_mapped;
+        Contrast.G = contrast_mapped;
+        Contrast.B = contrast_mapped;
+
+        PanelGamma.R = panelGamma;
+        PanelGamma.G = panelGamma;
+        PanelGamma.B = panelGamma;
+
+        Brightness.R = brightness_mapped;
+        Brightness.G = brightness_mapped;
+        Brightness.B = brightness_mapped;
+
+        Result = ApplyBrightnessContrastGamma(display, &PixTxCaps.pBlockConfigs[DesktopGammaBlockIndex], Contrast, PanelGamma, Brightness);
+        LOG_AND_EXIT_ON_ERROR(Result, "ApplyBrightnessContrastGamma");
+
+        // log for debug
+        cout << "======== SetBrightnessContrastGammaValues ========" << endl;
+        cout << "Contrast: " << contrast_mapped << endl;
+        cout << "PanelGamma:    " << panelGamma << endl;
+        cout << "Brightness:    " << brightness_mapped << endl;
+    }
+
+Exit:
+    return Result;
+}
+
+double MapSaturation(int sliderValue) {
+    return 0.01 + sliderValue * 0.02;
+}
+
+double MapHue(double sliderValue) {
+    double driverHue = fmod(sliderValue + 360.0, 360.0);
+    if (driverHue < 0.0)  // handle negative wrap (just in case)
+        driverHue += 360.0;
+    return driverHue;
+}
+
+ctl_result_t SetHueSaturationValues(ctl_device_adapter_handle_t hDevice, double Hue, double Saturation)
+{
+    ctl_result_t Result = CTL_RESULT_SUCCESS;
+    ctl_display_output_handle_t* hDisplayOutput = NULL;
+    uint32_t DisplayCount = 0;
+
+
+    // enumerate all the possible target display's for the adapters
+    Result = ctlEnumerateDisplayOutputs(hDevice, &DisplayCount, NULL);
+
+    if (CTL_RESULT_SUCCESS != Result)
+    {
+        APP_LOG_WARN("ctlEnumerateDisplayOutputs returned failure code: 0x%X", Result);
+        STORE_AND_RESET_ERROR(Result);
+    }
+    else if (DisplayCount <= 0)
+    {
+        APP_LOG_WARN("Invalid Display Count. skipping display enumration for adapter:%d", 0);
+    }
+
+    hDisplayOutput = (ctl_display_output_handle_t*)malloc(sizeof(ctl_display_output_handle_t) * DisplayCount);
     EXIT_ON_MEM_ALLOC_FAILURE(hDisplayOutput, "hDisplayOutput");
 
     Result = ctlEnumerateDisplayOutputs(hDevice, &DisplayCount, hDisplayOutput);
